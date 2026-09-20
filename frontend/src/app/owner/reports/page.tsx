@@ -2,16 +2,27 @@
 
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import axios from "axios";
 import api from "@/lib/api/api";
 import { useAuthStore } from "@/store/useAuthStore";
 import { SummaryRefreshBus } from "@/components/reports/SummaryRefreshBus";
+
+function describeError(error: unknown): string {
+  if (axios.isAxiosError(error)) {
+    if (error.response) {
+      return `HTTP ${error.response.status} — ${JSON.stringify(error.response.data)}`;
+    }
+    return `Network error — ${error.message}`;
+  }
+  return error instanceof Error ? error.message : String(error);
+}
 
 export default function OwnerReports() {
   const user = useAuthStore((s) => s.user);
   const businessId = user?.businessId;
   const [tab, setTab] = useState("summary");
 
-  const { data, isLoading, refetch } = useQuery({
+  const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ["businessSummary", businessId],
     queryFn: async () => {
       const res = await api.get("/reports/summary", {
@@ -23,6 +34,16 @@ export default function OwnerReports() {
   });
 
   SummaryRefreshBus.useRefreshOnShiftClose(refetch);
+
+  if (isError)
+    return (
+      <main className="p-6">
+        <div className="rounded border border-red-300 bg-red-50 p-4 text-red-700">
+          <p className="font-semibold">Could not load reports</p>
+          <p className="text-sm mt-1 break-all">{describeError(error)}</p>
+        </div>
+      </main>
+    );
 
   if (isLoading || !data) return <div className="p-6">Loading reports…</div>;
 

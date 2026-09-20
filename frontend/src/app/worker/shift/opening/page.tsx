@@ -19,7 +19,7 @@ export default function OpeningStockVerification() {
   const businessId = user?.businessId as string | undefined;
   const userId = user?.id as string | undefined;
 
-  const { data, isLoading: isInventoryLoading } = useQuery({
+  const { data, isLoading: isInventoryLoading, isError } = useQuery({
     queryKey: ["openingStock", businessId],
     queryFn: async () => {
       const response = await api.get("/inventory-items", {
@@ -43,7 +43,8 @@ export default function OpeningStockVerification() {
     queryKey: ["branches", businessId],
     queryFn: async () => {
       const response = await api.get("/branches", {
-        params: { businessId },
+        // /branches scopes by this header, not by the query string.
+        headers: { "x-business-id": businessId ?? "" },
       });
       return response.data as Array<{ id: string; name: string }>;
     },
@@ -90,6 +91,13 @@ export default function OpeningStockVerification() {
     e.preventDefault();
     startShiftMutation.mutate();
   };
+
+  if (isError)
+    return (
+      <div className="text-red-700">
+        Could not load opening inventory. Check that the backend is reachable.
+      </div>
+    );
 
   if (isInventoryLoading || !data) return <div>Loading opening inventory...</div>;
 

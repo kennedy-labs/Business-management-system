@@ -3,7 +3,10 @@ export const dynamic = "force-dynamic";
 import { useState } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import api from '@/lib/api/api';
-import { useAuthStore } from '@/store/useAuthStore';
+
+// Default business ID when running without auth
+const DEFAULT_BUSINESS_ID = "joypub";
+const DEFAULT_USER_ID = "default-user";
 
 const TABS = [
   { id: 'mpesa', label: 'Mpesa' },
@@ -12,18 +15,12 @@ const TABS = [
 ];
 
 export default function ActiveOperations() {
-  const user = useAuthStore((state) => state.user);
-  const businessId = user?.businessId as string | undefined;
+  const businessId = DEFAULT_BUSINESS_ID;
 
   const [tab, setTab] = useState('mpesa');
 
   const enabled = typeof window !== 'undefined' && !!businessId;
 
-  const accounts = useQuery({
-    queryKey: ['mpesaAccounts', businessId],
-    queryFn: async () => (await api.get('/mpesa-accounts', { params: { businessId } })).data,
-    enabled,
-  });
   const branches = useQuery({
     queryKey: ['branches'],
     queryFn: async () => (await api.get('/branches')).data,
@@ -68,10 +65,10 @@ export default function ActiveOperations() {
       </div>
 
       {tab === 'mpesa' && (
-        <MpesaForm businessId={businessId} accounts={accounts.data} shifts={shifts.data} isLoading={accounts.isLoading || shifts.isLoading} />
+        <MpesaForm shifts={shifts.data} isLoading={shifts.isLoading} />
       )}
       {tab === 'expense' && (
-        <ExpenseForm businessId={businessId} branches={branches.data} userId={user?.id} isLoading={branches.isLoading} />
+        <ExpenseForm businessId={businessId} branches={branches.data} userId={DEFAULT_USER_ID} isLoading={branches.isLoading} />
       )}
       {tab === 'stock' && (
         <StockForm businessId={businessId} branches={branches.data} products={products.data} units={units.data} locations={locations.data} shifts={shifts.data} />
@@ -80,26 +77,40 @@ export default function ActiveOperations() {
   );
 }
 
-// --- MpesaForm ---
-function MpesaForm({ businessId, accounts, shifts, isLoading }: { businessId?: string; accounts?: any[]; shifts?: any[]; isLoading: boolean }) {
-  const [show, setShow] = useState(false);
-  const form = new FormData();
+// --- MpesaForm: records a balance snapshot (opening/closing) on a period.
+// The M-Pesa amount is later derived as closing − opening, so no individual
+// transactions are recorded anywhere.
+function MpesaForm({ shifts, isLoading }: { shifts?: any[]; isLoading: boolean }) {
+  const [saved, setSaved] = useState(false);
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setSaved(false);
     const fd = new FormData(e.currentTarget as HTMLFormElement);
-    await api.post('/mpesa-transactions', { businessId, amount: Number(fd.get('amount')), accountId: fd.get('accountId'), reference: fd.get('reference'), phone: fd.get('phone') });
+    const shiftId = String(fd.get('shiftId') ?? '');
+    const kind = String(fd.get('kind') ?? 'opening');
+    if (!shiftId) return alert('Open a period first.');
+    await api.post(`/shifts/${shiftId}/mpesa-balances/${kind}`, {
+      balance: Number(fd.get('balance')),
+    });
+    setSaved(true);
     (e.target as any).reset();
   };
-  if (isLoading) return <p>Loading accounts…</p>;
+  if (isLoading) return <p>Loading periods…</p>;
   return (
     <form onSubmit={handleSubmit} className="space-y-3">
-      <input name="amount" type="number" step="0.01" placeholder="Amount" className="border p-2 rounded w-full" required />
-      <select name="accountId" className="border p-2 rounded w-full" required>
-        {accounts?.map((a: any) => <option key={a.id} value={a.id}>{a.name}</option>) || <option value="">No accounts</option>}
+      <select name="shiftId" className="border p-2 rounded w-full" required>
+        <option value="">Select period</option>
+        {(shifts ?? []).map((s: any) => (
+          <option key={s.id} value={s.id}>{new Date(s.openedAt).toLocaleString()} {s.closedAt ? '(closed)' : '(open)'}</option>
+        ))}
       </select>
-      <input name="reference" placeholder="Reference / Receipt No" className="border p-2 rounded w-full" />
-      <input name="phone" placeholder="Phone number" className="border p-2 rounded w-full" />
-      <button type="submit" className="bg-indigo-600 text-white p-2 rounded w-full">Record Mpesa</button>
+      <select name="kind" className="border p-2 rounded w-full" required>
+        <option value="opening">Opening balance</option>
+        <option value="closing">Closing balance</option>
+      </select>
+      <input name="balance" type="number" step="0.01" placeholder="Account balance right now" className="border p-2 rounded w-full" required />
+      <button type="submit" className="bg-indigo-600 text-white p-2 rounded w-full">Record Balance</button>
+      {saved && <p className="text-green-600 text-sm">Balance snapshot recorded.</p>}
     </form>
   );
 }

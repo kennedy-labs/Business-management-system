@@ -10,6 +10,8 @@ export class ProductsService {
   getAll(businessId: string) {
     return this.prisma.product.findMany({
       where: { businessId },
+      include: { stockLocation: true },
+      orderBy: { createdAt: 'asc' },
     });
   }
 

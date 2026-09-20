@@ -11,12 +11,29 @@ import { UpdateBusinessDto } from './dto/update-business.dto';
 export class BusinessService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async getBusinessesForUser(userId: string) {
+  // With authentication removed, `userId` is optional. When it is absent
+  // Prisma would silently drop the `where` filter and return every
+  // UserBusiness row — which produced duplicate businesses in the UI.
+  async getBusinessesForUser(userId?: string) {
+    if (!userId) {
+      return this.prisma.business.findMany({
+        orderBy: { createdAt: 'asc' },
+      });
+    }
+
     const userBusinesses = await this.prisma.userBusiness.findMany({
       where: { userId },
       include: { business: true },
     });
-    return userBusinesses.map((ub) => ub.business);
+
+    // A user may be linked to the same business more than once (multiple
+    // links/roles), so collapse them by business id before returning.
+    const unique = new Map<
+      string,
+      (typeof userBusinesses)[number]['business']
+    >();
+    for (const ub of userBusinesses) unique.set(ub.business.id, ub.business);
+    return [...unique.values()];
   }
 
   async getById(id: string) {

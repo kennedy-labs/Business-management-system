@@ -14,13 +14,12 @@ import { StockLocationsModule } from './stock-locations/stock-locations.module';
 import { StockMovementsModule } from './stock-movements/stock-movements.module';
 import { ShiftStockItemsModule } from './shift-stock-items/shift-stock-items.module';
 import { TransfersModule } from './transfers/transfers.module';
-import { MpesaAccountsModule } from './mpesa-accounts/mpesa-accounts.module';
-import { MpesaTransactionsModule } from './mpesa-transactions/mpesa-transactions.module';
+import { MpesaPeriodBalancesModule } from './mpesa-period-balances/mpesa-period-balances.module';
+import { ShiftReconciliationsModule } from './shift-reconciliations/shift-reconciliations.module';
 import { ExpensesModule } from './expenses/expenses.module';
 import { DiscrepanciesModule } from './discrepancies/discrepancies.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { HealthController } from './health.controller';
-import { AuthModule } from './auth/auth.module';
 import { ReportsModule } from './reports/reports.module';
 import { AnalyticsModule } from './analytics/analytics.module';
 import * as path from 'path';
@@ -44,11 +43,10 @@ import * as path from 'path';
     StockMovementsModule,
     ShiftStockItemsModule,
     TransfersModule,
-    MpesaAccountsModule,
-    MpesaTransactionsModule,
+    MpesaPeriodBalancesModule,
+    ShiftReconciliationsModule,
     ExpensesModule,
     DiscrepanciesModule,
-    AuthModule,
     ReportsModule,
     AnalyticsModule,
   ],

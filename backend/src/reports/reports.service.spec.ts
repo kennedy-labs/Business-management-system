@@ -1,4 +1,4 @@
-import { Test, TestingModule } from '@nestjs/testing';
+﻿import { Test, TestingModule } from '@nestjs/testing';
 import { ReportsService } from './reports.service';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -15,7 +15,7 @@ describe('ReportsService', () => {
       inventoryItem: { findMany: jest.fn() },
       shiftStockItem: { findMany: jest.fn() },
       expense: { findMany: jest.fn() },
-      mpesaTransaction: { findMany: jest.fn() },
+      mpesaPeriodBalance: { findMany: jest.fn() },
       discrepancy: { findMany: jest.fn() },
     };
 

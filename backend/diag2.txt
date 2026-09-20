@@ -1,0 +1,3 @@
+﻿nodeCount=2
+seedFileLen=0
+tscLen=0

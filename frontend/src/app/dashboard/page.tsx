@@ -13,7 +13,7 @@ export default function DashboardRedirect() {
 
   useEffect(() => {
     if (!user) {
-      router.push('/');
+      router.push('/owner/dashboard');
       return;
     }
 

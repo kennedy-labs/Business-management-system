@@ -9,7 +9,7 @@ export default function ShiftResult() {
   const user = useAuthStore((state) => state.user);
   const businessId = user?.businessId as string | undefined;
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, error } = useQuery({
     queryKey: ['shiftResult', businessId],
     queryFn: async () => {
       const response = await api.get('/reports/summary', {
@@ -21,6 +21,16 @@ export default function ShiftResult() {
     // and their business is known.
     enabled: typeof window !== 'undefined' && !!businessId,
   });
+
+  if (isError)
+    return (
+      <div className="text-red-700">
+        Could not load shift results:{" "}
+        {(error as any)?.response?.status
+          ? `HTTP ${(error as any).response.status}`
+          : (error as Error)?.message}
+      </div>
+    );
 
   if (isLoading || !data) return <div>Calculating shift results...</div>;
 

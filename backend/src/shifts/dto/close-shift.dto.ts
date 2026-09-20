@@ -11,6 +11,10 @@ export const CloseShiftSchema = z.object({
       addedQuantity: z.number().int().min(0).optional(),
     }),
   ),
+  // What the worker says they are handing over. M-Pesa is derived from the
+  // balance snapshots instead, so it is not part of the worker's declaration.
+  declaredCash: z.number().min(0).optional(),
+  declaredCredit: z.number().min(0).optional(),
 });
 
 export class CloseShiftDto extends createZodDto(CloseShiftSchema) {}

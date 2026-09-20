@@ -17,7 +17,7 @@ export class BusinessController {
   constructor(private readonly businessService: BusinessService) {}
 
   @Get()
-  getAll(@Headers('x-user-id') userId: string) {
+  getAll(@Headers('x-user-id') userId?: string) {
     return this.businessService.getBusinessesForUser(userId);
   }
 

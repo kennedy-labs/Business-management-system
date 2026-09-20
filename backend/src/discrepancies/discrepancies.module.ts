@@ -7,5 +7,8 @@ import { DiscrepanciesService } from './discrepancies.service';
   imports: [PrismaModule],
   controllers: [DiscrepanciesController],
   providers: [DiscrepanciesService],
+  // Exported so the reconciliation layer can raise discrepancies through the
+  // same validated path instead of writing rows directly.
+  exports: [DiscrepanciesService],
 })
 export class DiscrepanciesModule {}

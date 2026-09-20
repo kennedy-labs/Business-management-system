@@ -1,9 +1,14 @@
 export interface MpesaReportItem {
   id: string;
+  /** Money moved during the period: closingBalance - openingBalance. */
   amount: number;
-  transactionTime: Date;
+  openingBalance: number;
+  closingBalance: number | null;
+  openingAt: Date;
+  closingAt: Date | null;
+  /** OPEN while the closing balance has not been recorded yet. */
   status: string;
-  accountName: string;
+  shiftId: string;
 }
 
 export interface MpesaReport {

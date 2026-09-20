@@ -163,30 +163,43 @@ export class ReportsService {
   async getMpesaReport(businessId: string, filters: ReportFilterDto): Promise<MpesaReport> {
     await this.validateOwnership(businessId, filters);
     const { startDate, endDate } = filters;
-    const where: any = { businessId };
+    const where: Prisma.MpesaPeriodBalanceWhereInput = { businessId };
     if (startDate || endDate) {
-      where.transactionTime = {};
-      if (startDate) where.transactionTime.gte = new Date(startDate);
-      if (endDate) where.transactionTime.lte = new Date(endDate);
+      where.openingAt = {};
+      if (startDate) where.openingAt.gte = new Date(startDate);
+      if (endDate) where.openingAt.lte = new Date(endDate);
     }
 
-    const transactions = await this.prisma.mpesaTransaction.findMany({
+    // v1 source of truth: money moved during a period is
+    // closingBalance - openingBalance, read from the balance snapshots.
+    const periods = await this.prisma.mpesaPeriodBalance.findMany({
       where,
-      include: { mpesaAccount: true },
+      orderBy: { openingAt: 'desc' },
+    });
+
+    const items = periods.map((p) => {
+      const closed = p.closingBalance != null;
+      return {
+        id: p.id,
+        amount: closed
+          ? p.closingBalance!.minus(p.openingBalance).toNumber()
+          : 0,
+        openingBalance: p.openingBalance.toNumber(),
+        closingBalance: p.closingBalance ? p.closingBalance.toNumber() : null,
+        openingAt: p.openingAt,
+        closingAt: p.closingAt,
+        status: closed ? 'CLOSED' : 'OPEN',
+        shiftId: p.shiftId,
+      };
     });
 
     return {
-      items: transactions.map((t) => ({
-        id: t.id,
-        amount: t.amount.toNumber(),
-        transactionTime: t.transactionTime,
-        status: t.status,
-        accountName: t.mpesaAccount.displayName,
-      })),
-      totalReceived: transactions.reduce(
-        (sum, t) => sum + t.amount.toNumber(),
-        0,
-      ),
+      items,
+      // Only closed periods count as received: an open period has no known
+      // closing balance yet, so its delta does not exist.
+      totalReceived: items
+        .filter((i) => i.status === 'CLOSED')
+        .reduce((sum, i) => sum + i.amount, 0),
       generatedAt: new Date(),
     };
   }
@@ -335,17 +348,21 @@ export class ReportsService {
       new Prisma.Decimal(0),
     );
 
-    const mpesaWhere: any = { businessId };
+    const mpesaWhere: Prisma.MpesaPeriodBalanceWhereInput = { businessId };
     if (startDate || endDate) {
-      mpesaWhere.transactionTime = {};
-      if (startDate) mpesaWhere.transactionTime.gte = new Date(startDate);
-      if (endDate) mpesaWhere.transactionTime.lte = new Date(endDate);
+      mpesaWhere.openingAt = {};
+      if (startDate) mpesaWhere.openingAt.gte = new Date(startDate);
+      if (endDate) mpesaWhere.openingAt.lte = new Date(endDate);
     }
-    const mpesaTransactions = await this.prisma.mpesaTransaction.findMany({
+    const mpesaPeriods = await this.prisma.mpesaPeriodBalance.findMany({
       where: mpesaWhere,
     });
-    const totalMpesaReceived = mpesaTransactions.reduce(
-      (sum, t) => sum.plus(t.amount),
+    // Only closed periods have a known delta; open periods contribute nothing.
+    const totalMpesaReceived = mpesaPeriods.reduce(
+      (sum, p) =>
+        p.closingBalance != null
+          ? sum.plus(p.closingBalance.minus(p.openingBalance))
+          : sum,
       new Prisma.Decimal(0),
     );
 
@@ -404,7 +421,7 @@ export class ReportsService {
       where,
       include: {
         shiftStockItems: { include: { product: true } },
-        mpesaTransactions: true,
+        mpesaBalances: true,
       },
     });
 

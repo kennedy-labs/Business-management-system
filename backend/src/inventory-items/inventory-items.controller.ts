@@ -7,8 +7,10 @@ import {
   Param,
   Patch,
   Post,
+  Put,
 } from '@nestjs/common';
 import { CreateInventoryItemDto } from './dto/create-inventory-item.dto';
+import { SetInventoryLevelDto } from './dto/set-inventory-level.dto';
 import { UpdateInventoryItemDto } from './dto/update-inventory-item.dto';
 import { InventoryItemsService } from './inventory-items.service';
 
@@ -19,6 +21,18 @@ export class InventoryItemsController {
   @Get()
   getAll(@Headers('x-business-id') businessId: string) {
     return this.inventoryItemsService.getAll(businessId);
+  }
+
+  /**
+   * Manager sets the authoritative level for a product. Records an ADJUSTMENT
+   * stock movement so the change is auditable.
+   */
+  @Put('level')
+  setLevel(
+    @Headers('x-business-id') businessId: string,
+    @Body() body: SetInventoryLevelDto,
+  ) {
+    return this.inventoryItemsService.setLevel(businessId, body);
   }
 
   @Get(':id')

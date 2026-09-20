@@ -1,5 +1,6 @@
-import { Injectable } from '@nestjs/common';
+﻿import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import * as bcrypt from 'bcrypt';
 
 @Injectable()
 export class UsersService {
@@ -11,7 +12,11 @@ export class UsersService {
         where: { businessId },
         include: { user: true },
       });
-      return userBusinesses.map((ub) => ub.user);
+      // A user can be linked to the same business more than once, which
+      // returned the same user twice and produced duplicate React keys.
+      const unique = new Map<string, (typeof userBusinesses)[number]['user']>();
+      for (const ub of userBusinesses) unique.set(ub.user.id, ub.user);
+      return [...unique.values()];
     }
     return this.prisma.user.findMany();
   }
@@ -38,9 +43,12 @@ export class UsersService {
     email?: string;
     password?: string;
   }) {
-    const { businessId, ...userData } = body;
+    const { businessId, password, ...userData } = body;
     const user = await this.prisma.user.create({
-      data: userData as any,
+      data: {
+        ...userData,
+        ...(password ? { password: await bcrypt.hash(password, 10) } : {}),
+      } as any,
     });
 
     await this.prisma.userBusiness.create({
@@ -65,7 +73,10 @@ export class UsersService {
       email?: string;
     }>,
   ) {
-    const { businessId, ...updateData } = body as any;
+    const { businessId, password, ...rest } = body as any;
+    const updateData = password
+      ? { ...rest, password: await bcrypt.hash(password, 10) }
+      : rest;
     const user = await this.prisma.user.update({
       where: { id },
       data: updateData as any,
@@ -103,3 +114,5 @@ export class UsersService {
     return userBusinesses.map((ub) => ub.business);
   }
 }
+
+

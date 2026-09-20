@@ -1,34 +1,23 @@
-import axios from 'axios';
+﻿import axios from 'axios';
 
-// Resolve the backend API base URL.
-// In production this comes from NEXT_PUBLIC_API_URL (set in the hosting provider's
-// environment, e.g. Vercel dashboard). It falls back to the deployed Render backend
-// so the frontend reliably reaches the live API even if the env var is missing.
 const apiBaseURL =
-  process.env.NEXT_PUBLIC_API_URL ?? 'https://bar-ops-system.onrender.com';
+  process.env.NEXT_PUBLIC_API_URL ?? '/api';
+
+// Auth is disabled during development, so every request runs as this
+// default business until authentication is re-introduced.
+const DEFAULT_BUSINESS_ID =
+  process.env.NEXT_PUBLIC_BUSINESS_ID ?? 'joypub';
 
 const api = axios.create({
-  baseURL: apiBaseURL,
+  baseURL: apiBaseURL, // local backend during development
 });
 
-// Add a request interceptor to include the JWT token.
-// localStorage is only available in the browser; guard it so the client can
-// never crash during server-side static rendering (e.g. build-time export).
-// The token is stored via JSON.stringify, so parse it before using.
 api.interceptors.request.use((config) => {
-  if (typeof window !== 'undefined') {
-    const raw = localStorage.getItem('token');
-    if (raw) {
-      try {
-        const token = JSON.parse(raw) as string;
-        if (token) {
-          config.headers.Authorization = `Bearer ${token}`;
-        }
-      } catch {
-        // Fall back to the raw value if it wasn't JSON-encoded.
-        config.headers.Authorization = `Bearer ${raw}`;
-      }
-    }
+  // An explicit per-request value wins, so screens that let the owner switch
+  // business (branch endpoints are keyed off this header, not a query param)
+  // can target the selected business instead of the development default.
+  if (!config.headers['x-business-id']) {
+    config.headers['x-business-id'] = DEFAULT_BUSINESS_ID;
   }
   return config;
 });

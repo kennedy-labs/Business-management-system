@@ -7,46 +7,60 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model MpesaAccount {
-  id                String             @id @default(cuid())
-  businessId        String
-  branchId          String
-  accountIdentifier String
-  displayName       String
-  accountType       MpesaAccountType
-  status            MpesaAccountStatus @default(ACTIVE)
-  createdAt         DateTime           @default(now())
-  updatedAt         DateTime           @updatedAt
-  business          Business           @relation(fields: [businessId], references: [id])
-  branch            Branch             @relation(fields: [branchId], references: [id])
-  transactions      MpesaTransaction[]
+/// The business's M-Pesa balance, read twice per period.
+///
+/// This is the v1 source of truth for M-Pesa money: the worker reads the
+/// account balance when they start (e.g. 6,005 at 08:43) and again when they
+/// finish (e.g. 16,005 at 09:31). The money taken during the period is simply
+/// `closingBalance - openingBalance`. No accounts registry, no SMS parsing,
+/// no per-transaction attribution — one row per period is the whole model.
+model MpesaPeriodBalance {
+  id             String    @id @default(cuid())
+  businessId     String
+  branchId       String
+  shiftId        String    @unique
+  openingBalance Decimal
+  openingAt      DateTime
+  closingBalance Decimal?
+  closingAt      DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  business       Business  @relation(fields: [businessId], references: [id])
+  branch         Branch    @relation(fields: [branchId], references: [id])
+  shift          Shift     @relation(fields: [shiftId], references: [id])
 
-  @@unique([businessId, accountIdentifier])
+  @@index([businessId, openingAt])
 }
 
-model MpesaTransaction {
-  id                    String                 @id @default(cuid())
-  businessId            String
-  branchId              String
-  mpesaAccountId        String
-  shiftId               String?
-  transactionReference  String
-  transactionType       MpesaTransactionType
-  amount                Decimal
-  transactionTime       DateTime
-  sender                String?
-  receiver              String?
-  status                MpesaTransactionStatus @default(RECEIVED)
-  reconciliationStatus  MpesaReconciliationStatus @default(UNRECONCILED)
-  createdAt             DateTime               @default(now())
-  updatedAt             DateTime               @updatedAt
-  business              Business               @relation(fields: [businessId], references: [id])
-  mpesaAccount          MpesaAccount           @relation(fields: [mpesaAccountId], references: [id])
-  shift                 Shift?                 @relation(fields: [shiftId], references: [id])
+/// The owner's confirmation that a worker accounted for the period correctly:
+/// "I gave you stock, you sold it, you returned the remaining stock plus the
+/// money." Every figure is snapshotted at decision time because product prices
+/// and costs change later, and the historical confirmation must not move.
+model ShiftReconciliation {
+  id              String               @id @default(cuid())
+  businessId      String
+  branchId        String
+  shiftId         String               @unique
+  expectedRevenue Decimal              @default(0)
+  expectedCost    Decimal              @default(0)
+  expectedProfit  Decimal              @default(0)
+  declaredCash    Decimal              @default(0)
+  declaredMpesa   Decimal              @default(0)
+  declaredCredit  Decimal              @default(0)
+  declaredTotal   Decimal              @default(0)
+  variance        Decimal              @default(0)
+  status          ReconciliationStatus @default(AWAITING_OWNER)
+  confirmedById   String?
+  confirmedAt     DateTime?
+  notes           String?
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+  business        Business             @relation(fields: [businessId], references: [id])
+  branch          Branch               @relation(fields: [branchId], references: [id])
+  shift           Shift                @relation(fields: [shiftId], references: [id])
 
-  @@unique([mpesaAccountId, transactionReference])
-  @@index([businessId, transactionTime])
-  @@index([shiftId])
+  @@index([businessId, status])
+  @@index([branchId, createdAt])
 }
 
 model Business {
@@ -58,15 +72,18 @@ model Business {
   email             String?
   phone             String?
   timezone          String             @default("Africa/Nairobi")
+  /// SHIFT businesses run time-boxed shifts; DAILY businesses have a single
+  /// open/close cycle per day. Both share the same accountability period model.
+  periodMode        PeriodMode         @default(SHIFT)
   branches          Branch[]
   discrepancies     Discrepancy[]
-  mpesaAccounts     MpesaAccount[]
-  mpesaTransactions MpesaTransaction[]
   products          Product[]
   stockMovements    StockMovement[]    @relation("BusinessStockMovements")
   stockLocations    StockLocation[]
   transfers         Transfer[]
   userBusinesses    UserBusiness[]
+  periodBalances    MpesaPeriodBalance[]
+  reconciliations   ShiftReconciliation[]
 }
 
 model Branch {
@@ -81,10 +98,11 @@ model Branch {
   inventory         InventoryItem[]
   shifts            Shift[]
   movements         StockMovement[]
-  mpesaAccounts     MpesaAccount[]
   receiverTransfers Transfer[]      @relation("ReceiverTransfers")
   senderTransfers   Transfer[]      @relation("SenderTransfers")
   users             User[]
+  periodBalances    MpesaPeriodBalance[]
+  reconciliations   ShiftReconciliation[]
 
   @@unique([businessId, name])
 }
@@ -104,6 +122,9 @@ model Product {
   movements       StockMovement[]
   transferItems   TransferItem[]
   discrepancies   Discrepancy[]
+  // A product exists in exactly one place.
+  stockLocationId String?
+  stockLocation   StockLocation?       @relation(fields: [stockLocationId], references: [id])
 
   @@unique([businessId, name])
 }
@@ -242,6 +263,7 @@ model StockLocation {
   movements         StockMovement[]
   shiftStockItems   ShiftStockItem[]
   receivedTransfers Transfer[]        @relation("ReceiverLocationTransfers")
+  products          Product[]
   sentTransfers     Transfer[]        @relation("SenderLocationTransfers")
   discrepancies     Discrepancy[]
 }
@@ -353,12 +375,16 @@ model Shift {
   closedAt          DateTime?
   branchId          String
   userId            String
+  /// SHIFT = a time-boxed shift, DAILY = the whole trading day for businesses
+  /// that have a single worker opening and closing. Same accountability flow.
+  periodType        PeriodType         @default(SHIFT)
   discrepancies     Discrepancy[]
-  mpesaTransactions MpesaTransaction[]
   branch            Branch             @relation(fields: [branchId], references: [id])
   user              User               @relation(fields: [userId], references: [id])
   shiftStockItems   ShiftStockItem[]
   movements         StockMovement[]
+  mpesaBalances     MpesaPeriodBalance[]
+  reconciliation    ShiftReconciliation?
 }
 
 enum MovementType {
@@ -398,34 +424,25 @@ enum TransferStatus {
   CANCELLED
 }
 
-enum MpesaAccountStatus {
-  ACTIVE
-  INACTIVE
+
+/// Whether operational periods are time-boxed shifts or whole trading days.
+enum PeriodType {
+  SHIFT
+  DAILY
 }
 
-enum MpesaAccountType {
-  PAYBILL
-  POCHI
-  BUY_GOODS_AND_SERVICES
-  SEND_MONEY
+/// The business-wide default for the above.
+enum PeriodMode {
+  SHIFT
+  DAILY
 }
 
-enum MpesaTransactionType {
-  PAYBILL
-  POCHI
-  BUY_GOODS_AND_SERVICES
-  SEND_MONEY
-}
-
-enum MpesaTransactionStatus {
-  RECEIVED
-  RECONCILED
+/// Where a period sits in the owner-confirms-the-worker loop.
+enum ReconciliationStatus {
+  AWAITING_WORKER
+  AWAITING_OWNER
+  CONFIRMED
   DISPUTED
-}
-
-enum MpesaReconciliationStatus {
-  UNRECONCILED
-  RECONCILED
 }
 
 enum DiscrepancyType {

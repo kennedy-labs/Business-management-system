@@ -1,22 +1,13 @@
 import { create } from 'zustand';
 
-const TOKEN_KEY = 'token';
-const USER_KEY = 'user';
-
-function readStorage<T>(key: string): T | null {
-  if (typeof window === 'undefined') return null;
-  try {
-    const raw = localStorage.getItem(key);
-    return raw ? (JSON.parse(raw) as T) : null;
-  } catch {
-    return null;
-  }
-}
-
-function writeStorage(key: string, value: unknown) {
-  if (typeof window === 'undefined') return;
-  localStorage.setItem(key, JSON.stringify(value));
-}
+// Mock auth store that always returns default values when auth is disabled
+const DEFAULT_USER = {
+  id: 'default-user-id',
+  name: 'Default User',
+  role: 'OWNER',
+  businessId: 'joypub',
+  businessName: 'joypub',
+};
 
 interface AuthState {
   token: string | null;
@@ -25,20 +16,14 @@ interface AuthState {
   logout: () => void;
 }
 
-// Create the store first so we can initialize it
+// Create the store with default values (no auth required)
 export const useAuthStore = create<AuthState>((set) => ({
-  token: readStorage<string>(TOKEN_KEY),
-  user: readStorage<any>(USER_KEY),
+  token: 'local-dev',
+  user: DEFAULT_USER,
   setAuth: (token, user) => {
-    writeStorage(TOKEN_KEY, token);
-    writeStorage(USER_KEY, user);
     set({ token, user });
   },
   logout: () => {
-    if (typeof window !== 'undefined') {
-      localStorage.removeItem(TOKEN_KEY);
-      localStorage.removeItem(USER_KEY);
-    }
     set({ token: null, user: null });
   },
 }));
