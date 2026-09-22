@@ -20,7 +20,7 @@ export default function DashboardRedirect() {
     if (user.role === 'OWNER') {
       router.push('/owner/dashboard');
     } else {
-      router.push('/worker/shift');
+      router.push('/worker');
     }
   }, [user, router]);
 

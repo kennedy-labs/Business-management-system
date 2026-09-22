@@ -5,7 +5,8 @@ import { InventoryItem, Product } from "./dataHooks";
 
 interface SetLevelModalProps {
   product: Product;
-  currentLevel: number;
+  /** null = the level has never been set for this product. */
+  currentLevel: number | null;
   isUpdating: boolean;
   onClose: () => void;
   onSave: (productId: string, quantity: number) => void | Promise<void>;
@@ -23,7 +24,7 @@ function SetLevelModal({
   onClose,
   onSave,
 }: SetLevelModalProps) {
-  const [value, setValue] = useState(String(currentLevel));
+  const [value, setValue] = useState(currentLevel === null ? "" : String(currentLevel));
   const [isSaving, setIsSaving] = useState(false);
 
   const trimmed = value.trim();
@@ -52,7 +53,7 @@ function SetLevelModal({
         <p className="text-sm text-gray-600 mb-4">
           <span className="font-medium text-gray-900">{product.name}</span>
           {" — current level: "}
-          {currentLevel.toLocaleString()}
+          {currentLevel === null ? "not set" : currentLevel.toLocaleString()}
         </p>
 
         <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -122,7 +123,8 @@ export default function ProductsTable({
   updatingProducts,
 }: ProductsTableProps) {
   const levelByProduct = useMemo(() => {
-    const map = new Map<string, number>();
+    // null = no inventory row yet (level never set) — distinct from a real 0.
+    const map = new Map<string, number | null>();
     for (const item of inventory ?? []) {
       map.set(item.productId, item.quantity);
     }
@@ -131,12 +133,12 @@ export default function ProductsTable({
 
   const [editingProduct, setEditingProduct] = useState<{
     product: Product;
-    level: number;
+    level: number | null;
   } | null>(null);
 
   const handleEditClick = useCallback(
     (product: Product) => {
-      const level = levelByProduct.get(product.id) ?? 0;
+      const level = levelByProduct.get(product.id) ?? null;
       setEditingProduct({ product, level });
     },
     [levelByProduct]
@@ -176,7 +178,14 @@ export default function ProductsTable({
       key: "level",
       header: "Level",
       cell: (product: Product) => {
-        const level = levelByProduct.get(product.id) ?? 0;
+        const level = levelByProduct.get(product.id);
+        if (level === null || level === undefined) {
+          return (
+            <span className="font-medium text-gray-400" title="Level not set yet">
+              —
+            </span>
+          );
+        }
         return (
           <span
             className={

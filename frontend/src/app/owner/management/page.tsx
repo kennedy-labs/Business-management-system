@@ -13,7 +13,7 @@ export type User = {
   id: string;
   name: string;
   phone: string;
-  role: "OWNER" | "MANAGER" | "WORKER";
+  role: "OWNER" | "WORKER";
   active: boolean;
 };
 
@@ -183,15 +183,15 @@ function UserForm({ bizId, editing, onSuccess }: { bizId?: string; editing?: Use
   const qc = useQueryClient();
   const [name, setName] = useState(editing?.name ?? "");
   const [phone, setPhone] = useState(editing?.phone ?? "");
-  const [role, setRole] = useState<"OWNER" | "MANAGER" | "WORKER">(editing?.role ?? "WORKER");
+  const [role, setRole] = useState<"OWNER" | "WORKER">(editing?.role ?? "WORKER");
   const [password, setPassword] = useState("");
   const isEdit = !!editing;
 
   const handleSubmit = () => {
-    if (!name || !phone) return alert("Name and phone required.");
+    if (!name.trim()) return alert("Name is required.");
     const payload = isEdit
-      ? { name, phone, role }
-      : { name, phone, role, password, businessId: bizId };
+      ? { name: name.trim(), phone: phone || undefined, role }
+      : { name: name.trim(), phone: phone || undefined, role: "WORKER", password: password || undefined, businessId: bizId };
     const req = isEdit
       ? api.patch(`/users/${editing!.id}`, payload)
       : api.post("/users", payload);
@@ -208,12 +208,13 @@ function UserForm({ bizId, editing, onSuccess }: { bizId?: string; editing?: Use
       <div className="bg-white p-6 rounded w-full max-w-md mx-2">
         <h3 className="font-bold mb-4">{isEdit ? "Edit User" : "Add User"}</h3>
         <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Full Name" className="border p-2 rounded w-full mb-2" />
-        <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Phone" className="border p-2 rounded w-full mb-2" />
-        <select value={role} onChange={(e) => setRole(e.target.value as User["role"])} className="border p-2 rounded w-full mb-2">
-          <option value="WORKER">Worker</option>
-          <option value="MANAGER">Manager</option>
-          <option value="OWNER">Owner</option>
-        </select>
+        <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Phone (optional)" className="border p-2 rounded w-full mb-2" />
+        {isEdit && (
+          <select value={role} onChange={(e) => setRole(e.target.value as User["role"])} className="border p-2 rounded w-full mb-2">
+            <option value="WORKER">Worker</option>
+            <option value="OWNER">Owner</option>
+          </select>
+        )}
         {!isEdit && (
           <input value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Temp Password" type="password" className="border p-2 rounded w-full mb-2" />
         )}

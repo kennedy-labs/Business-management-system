@@ -14,6 +14,18 @@ const nextConfig: NextConfig = {
   // Requests become same-origin in the browser, so there is no CORS
   // preflight and no dependence on the backend port being reachable
   // from the user's browser.
+  async redirects() {
+    return [
+      {
+        // The old worker flow was five pages under /worker/shift; it is now a
+        // single state machine at /worker. Old links land in the right place.
+        source: "/worker/shift/:path*",
+        destination: "/worker",
+        permanent: false,
+      },
+    ];
+  },
+
   async rewrites() {
     return [
       {
