@@ -1,22 +1,15 @@
 import { useCallback, useMemo, useState } from "react";
-import { Pencil } from "lucide-react";
-import DataTable, { ColumnDef } from "../Table/DataTable";
+import { Pencil, Package, Hash, DollarSign, X, Check } from "lucide-react";
 import { InventoryItem, Product } from "./dataHooks";
 
 interface SetLevelModalProps {
   product: Product;
-  /** null = the level has never been set for this product. */
   currentLevel: number | null;
   isUpdating: boolean;
   onClose: () => void;
   onSave: (productId: string, quantity: number) => void | Promise<void>;
 }
 
-/**
- * Modal for setting the inventory level of a single product.
- * Hidden behind the edit icon in the products table so the table stays clean.
- * Quantities below zero are rejected on the client and again by the API.
- */
 function SetLevelModal({
   product,
   currentLevel,
@@ -35,7 +28,8 @@ function SetLevelModal({
 
   const isBusy = isUpdating || isSaving;
 
-  const handleSave = async () => {
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault();
     if (!isValid || isBusy) return;
     setIsSaving(true);
     try {
@@ -47,56 +41,68 @@ function SetLevelModal({
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
-      <div className="bg-white p-6 rounded-lg w-full max-w-sm mx-4">
-        <h2 className="text-xl font-bold mb-1">Set Inventory Level</h2>
-        <p className="text-sm text-gray-600 mb-4">
-          <span className="font-medium text-gray-900">{product.name}</span>
-          {" — current level: "}
-          {currentLevel === null ? "not set" : currentLevel.toLocaleString()}
-        </p>
-
-        <label className="block text-sm font-medium text-gray-700 mb-1">
-          New Level
-        </label>
-        <input
-          type="number"
-          min="0"
-          step="1"
-          value={value}
-          autoFocus
-          onChange={(e) => setValue(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "-" || e.key === "e") e.preventDefault();
-          }}
-          className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-        />
-        {isNegative ? (
-          <p className="text-xs text-red-600 mt-1">
-            Inventory level cannot be negative.
-          </p>
-        ) : (
-          <p className="text-xs text-gray-500 mt-1">
-            Enter the counted quantity. It cannot go below 0.
-          </p>
-        )}
-
-        <div className="flex gap-3 mt-6">
-          <button
-            onClick={handleSave}
-            disabled={!isValid || isBusy}
-            className="flex-1 bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
-          >
-            {isBusy ? "Saving..." : "Save Level"}
-          </button>
+    <div className="fixed inset-0 bg-black/75 backdrop-blur-xs flex items-center justify-center z-50 p-4">
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-sm shadow-2xl p-6 animate-in fade-in zoom-in-95 duration-150">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-bold text-white">Set Stock Level</h2>
           <button
             onClick={onClose}
-            disabled={isBusy}
-            className="flex-1 bg-gray-300 text-gray-700 px-4 py-2 rounded hover:bg-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-300"
+            className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition-colors"
           >
-            Cancel
+            <X className="w-5 h-5" />
           </button>
         </div>
+
+        <p className="text-xs text-slate-400 mb-4">
+          Product: <span className="font-semibold text-white">{product.name}</span>
+          <br />
+          Current on hand:{" "}
+          <span className="font-semibold text-indigo-400">
+            {currentLevel === null ? "0" : currentLevel.toLocaleString()} units
+          </span>
+        </p>
+
+        <form onSubmit={handleSave} className="space-y-4">
+          <div>
+            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-1.5">
+              Counted Quantity *
+            </label>
+            <input
+              type="number"
+              min="0"
+              step="1"
+              value={value}
+              autoFocus
+              onChange={(e) => setValue(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "-" || e.key === "e") e.preventDefault();
+              }}
+              placeholder="0"
+              className="w-full px-4 py-2.5 bg-slate-950 border border-slate-700/80 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm font-semibold transition-all"
+            />
+            {isNegative && (
+              <p className="text-xs text-rose-400 mt-1">Inventory level cannot be negative.</p>
+            )}
+          </div>
+
+          <div className="flex gap-3 pt-2">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={isBusy}
+              className="flex-1 py-2 px-3 rounded-xl border border-slate-700 text-slate-300 hover:text-white hover:bg-slate-800 text-xs font-medium transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={!isValid || isBusy}
+              className="flex-1 py-2 px-3 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-xs font-semibold rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:cursor-not-allowed"
+            >
+              {isBusy ? "Updating..." : "Save Count"}
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   );
@@ -110,11 +116,6 @@ interface ProductsTableProps {
   updatingProducts: Set<string>;
 }
 
-/**
- * Products table showing the stored inventory level per product.
- * Inventory is the source of truth, so the stored quantity is shown as-is.
- * "Set Inventory Level" is kept out of sight behind a pencil icon in the row.
- */
 export default function ProductsTable({
   products,
   inventory,
@@ -122,122 +123,114 @@ export default function ProductsTable({
   onUpdateLevel,
   updatingProducts,
 }: ProductsTableProps) {
-  const levelByProduct = useMemo(() => {
-    // null = no inventory row yet (level never set) — distinct from a real 0.
-    const map = new Map<string, number | null>();
-    for (const item of inventory ?? []) {
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+
+  const inventoryByProduct = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const item of inventory) {
       map.set(item.productId, item.quantity);
     }
     return map;
   }, [inventory]);
 
-  const [editingProduct, setEditingProduct] = useState<{
-    product: Product;
-    level: number | null;
-  } | null>(null);
-
-  const handleEditClick = useCallback(
-    (product: Product) => {
-      const level = levelByProduct.get(product.id) ?? null;
-      setEditingProduct({ product, level });
+  const getCurrentLevel = useCallback(
+    (productId: string): number | null => {
+      return inventoryByProduct.get(productId) ?? null;
     },
-    [levelByProduct]
+    [inventoryByProduct]
   );
 
-  const handleSave = useCallback(
-    (productId: string, quantity: number) => {
-      if (quantity < 0) return;
-      return onUpdateLevel(productId, quantity);
-    },
-    [onUpdateLevel]
-  );
+  if (isLoading) {
+    return (
+      <div className="space-y-3">
+        {[...Array(4)].map((_, i) => (
+          <div key={i} className="h-14 bg-slate-900 border border-slate-800/80 rounded-xl animate-pulse" />
+        ))}
+      </div>
+    );
+  }
 
-  const columns: ColumnDef<Product>[] = [
-    {
-      key: "product",
-      header: "Product",
-      cell: (product: Product) => (
-        <div>
-          <div className="font-medium text-gray-900">{product.name}</div>
-          <div className="text-sm text-gray-500">
-            KES {Number(product.sellingPrice).toLocaleString()}
-          </div>
-        </div>
-      ),
-    },
-    {
-      key: "location",
-      header: "Location",
-      cell: (product: Product) => (
-        <span className="text-gray-600">
-          {product.stockLocation?.name ?? "—"}
-        </span>
-      ),
-    },
-    {
-      key: "level",
-      header: "Level",
-      cell: (product: Product) => {
-        const level = levelByProduct.get(product.id);
-        if (level === null || level === undefined) {
-          return (
-            <span className="font-medium text-gray-400" title="Level not set yet">
-              —
-            </span>
-          );
-        }
-        return (
-          <span
-            className={
-              level <= 0 ? "font-semibold text-red-600" : "font-semibold text-gray-900"
-            }
-          >
-            {level.toLocaleString()}
-          </span>
-        );
-      },
-    },
-    {
-      key: "actions",
-      header: "",
-      className: "w-12 text-right",
-      cell: (product: Product) => {
-        const isUpdating = updatingProducts.has(product.id);
-        return (
-          <button
-            type="button"
-            onClick={() => handleEditClick(product)}
-            disabled={isUpdating}
-            title="Set inventory level"
-            aria-label={"Set inventory level for " + product.name}
-            className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-full focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
-          >
-            <Pencil className="w-4 h-4" aria-hidden="true" />
-          </button>
-        );
-      },
-    },
-  ];
+  if (products.length === 0) {
+    return (
+      <div className="p-12 text-center rounded-2xl bg-slate-900/40 border border-slate-800/80 text-slate-400">
+        <Package className="w-10 h-10 mx-auto mb-3 text-slate-600" />
+        <p className="font-medium text-white">No products found</p>
+        <p className="text-xs text-slate-400 mt-1">
+          Click &quot;+ Add Product&quot; to add drinks, beverages, and set starting quantities.
+        </p>
+      </div>
+    );
+  }
 
   return (
-    <div>
-      <DataTable
-        columns={columns}
-        data={products ?? []}
-        isLoading={isLoading}
-        rowKey={(product) => product.id}
-        emptyMessage="No products found."
-      />
+    <>
+      <div className="overflow-x-auto rounded-2xl border border-slate-800 bg-slate-900/60 shadow-xl">
+        <table className="min-w-full divide-y divide-slate-800 text-left">
+          <thead className="bg-slate-900 text-xs font-semibold uppercase tracking-wider text-slate-400">
+            <tr>
+              <th className="px-6 py-4">Product Name</th>
+              <th className="px-6 py-4">Selling Price</th>
+              <th className="px-6 py-4">Stock Location</th>
+              <th className="px-6 py-4">Current Stock</th>
+              <th className="px-6 py-4 text-right">Actions</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-800/80 text-sm text-slate-200">
+            {products.map((product) => {
+              const currentLevel = getCurrentLevel(product.id);
+              const isUpdating = updatingProducts.has(product.id);
+              return (
+                <tr key={product.id} className="hover:bg-slate-800/40 transition-colors">
+                  <td className="px-6 py-4">
+                    <div className="font-semibold text-white">{product.name}</div>
+                  </td>
+                  <td className="px-6 py-4">
+                    <span className="font-medium text-emerald-400">
+                      KES {product.sellingPrice?.toLocaleString() ?? "0"}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4">
+                    <span className="text-xs px-2.5 py-1 rounded-md bg-slate-800 text-slate-300 border border-slate-700/60">
+                      {product.stockLocation?.name || "Counter"}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="flex items-center gap-2">
+                      <span
+                        className={`font-bold ${
+                          (currentLevel ?? 0) === 0 ? "text-amber-400" : "text-white"
+                        }`}
+                      >
+                        {currentLevel === null ? 0 : currentLevel.toLocaleString()} units
+                      </span>
+                    </div>
+                  </td>
+                  <td className="px-6 py-4 text-right">
+                    <button
+                      onClick={() => setEditingProduct(product)}
+                      disabled={isUpdating}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-indigo-300 hover:text-white rounded-lg text-xs font-medium border border-slate-700 transition-colors cursor-pointer"
+                    >
+                      <Pencil className="w-3.5 h-3.5" />
+                      <span>Edit Count</span>
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
 
       {editingProduct && (
         <SetLevelModal
-          product={editingProduct.product}
-          currentLevel={editingProduct.level}
-          isUpdating={updatingProducts.has(editingProduct.product.id)}
+          product={editingProduct}
+          currentLevel={getCurrentLevel(editingProduct.id)}
+          isUpdating={updatingProducts.has(editingProduct.id)}
           onClose={() => setEditingProduct(null)}
-          onSave={handleSave}
+          onSave={onUpdateLevel}
         />
       )}
-    </div>
+    </>
   );
 }

@@ -1,23 +1,27 @@
-﻿import axios from 'axios';
+import axios from "axios";
+import { useAuthStore } from "@/store/useAuthStore";
 
-const apiBaseURL =
-  process.env.NEXT_PUBLIC_API_URL ?? '/api';
-
-// Auth is disabled during development, so every request runs as this
-// default business until authentication is re-introduced.
-const DEFAULT_BUSINESS_ID =
-  process.env.NEXT_PUBLIC_BUSINESS_ID ?? 'joypub';
+const apiBaseURL = process.env.NEXT_PUBLIC_API_URL ?? "/api";
 
 const api = axios.create({
-  baseURL: apiBaseURL, // local backend during development
+  baseURL: apiBaseURL,
 });
 
 api.interceptors.request.use((config) => {
-  // An explicit per-request value wins, so screens that let the owner switch
-  // business (branch endpoints are keyed off this header, not a query param)
-  // can target the selected business instead of the development default.
-  if (!config.headers['x-business-id']) {
-    config.headers['x-business-id'] = DEFAULT_BUSINESS_ID;
+  if (typeof window !== "undefined") {
+    const authState = useAuthStore.getState();
+    const token = authState.token;
+    const businessId = authState.user?.businessId || authState.business?.id;
+
+    if (token && !config.headers["Authorization"]) {
+      config.headers["Authorization"] = `Bearer ${token}`;
+    }
+    if (businessId && !config.headers["x-business-id"]) {
+      config.headers["x-business-id"] = businessId;
+    }
+    if (authState.user?.id && !config.headers["x-user-id"]) {
+      config.headers["x-user-id"] = authState.user.id;
+    }
   }
   return config;
 });

@@ -3,6 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 import api from "@/lib/api/api";
 import { useAuthStore } from "@/store/useAuthStore";
+import { Wallet, Smartphone, ArrowDownRight, ArrowUpRight } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
@@ -25,9 +26,6 @@ export default function OwnerPayments() {
   const businessId = user?.businessId as string | undefined;
   const enabled = !!businessId;
 
-  // M-Pesa is not a list of individual transactions. Each period records
-  // an opening and closing balance snapshot, and the difference is what the
-  // worker handled. We fetch the most recent periods and their snapshots.
   const { data: shifts, isLoading: ls } = useQuery({
     queryKey: ["shifts", businessId],
     queryFn: async () =>
@@ -35,16 +33,19 @@ export default function OwnerPayments() {
     enabled,
   });
 
-  const recentShifts = (shifts ?? []).slice(0, 10);
+  const recentShifts = (shifts ?? []).slice(0, 15);
   const balancesByShift = useQuery({
     queryKey: ["mpesaBalances", businessId, recentShifts.map((s) => s.id).join(",")],
     queryFn: async () => {
-      const results: Record<string, MpesaBalance[]> = {};
+      const results: Record<string, any> = {};
       await Promise.all(
         recentShifts.map(async (s) => {
-          results[s.id] = (
-            (await api.get(`/shifts/${s.id}/mpesa-balances`)).data
-          ) as MpesaBalance[];
+          try {
+            const res = await api.get(`/shifts/${s.id}/mpesa-balances`);
+            results[s.id] = res.data?.totals?.declaredMpesa ?? 0;
+          } catch {
+            results[s.id] = 0;
+          }
         }),
       );
       return results;
@@ -52,55 +53,83 @@ export default function OwnerPayments() {
     enabled: enabled && recentShifts.length > 0,
   });
 
-  const periodDelta = (id: string): number | null => {
-    const bals = balancesByShift.data?.[id];
-    if (!bals) return null;
-    const opening = bals.find((b) => b.kind === "OPENING");
-    const closing = bals.find((b) => b.kind === "CLOSING");
-    if (!opening || !closing) return null;
-    return Number(closing.balance) - Number(opening.balance);
-  };
-
-  if (!businessId)
-    return <main className="p-6"><p>Loading...</p></main>;
+  if (!businessId) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px] text-slate-400">
+        <div className="w-5 h-5 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin mr-2" />
+        <span>Loading payments...</span>
+      </div>
+    );
+  }
 
   return (
-    <>
-      <main className="p-6">
-        <h1 className="text-3xl font-bold mb-6">Payments</h1>
+    <div className="space-y-6 max-w-7xl mx-auto">
+      <div>
+        <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
+          Payments & Mobile Money Audit
+        </h1>
+        <p className="text-sm text-slate-400 mt-1">
+          Review M-Pesa till balances and declared shift amounts.
+        </p>
+      </div>
 
-        <section className="mb-10">
-          <div className="flex justify-between items-center mb-3">
-            <h2 className="text-xl font-semibold">M-Pesa by Period</h2>
-            <p className="text-sm text-gray-500">Closing balance − opening balance per period</p>
+      <section className="space-y-4">
+        {ls ? (
+          <div className="space-y-3">
+            {[...Array(3)].map((_, i) => (
+              <div key={i} className="h-16 bg-slate-900 border border-slate-800 rounded-xl animate-pulse" />
+            ))}
           </div>
-          {ls ? <p>Loading periods...</p> : !recentShifts.length ? (
-            <p className="text-gray-500">No periods recorded yet.</p>
-          ) : (
-            <table className="min-w-full bg-white rounded shadow">
-              <thead><tr className="bg-gray-100"><th className="p-3 text-left">Opened</th><th className="p-3 text-left">Type</th><th className="p-3 text-left">Closed</th><th className="p-3 text-right">M-Pesa Handled</th></tr></thead>
-              <tbody>
+        ) : !recentShifts.length ? (
+          <div className="p-12 text-center rounded-2xl bg-slate-900/40 border border-slate-800 text-slate-400">
+            <Smartphone className="w-10 h-10 mx-auto mb-3 text-slate-600" />
+            <p className="font-medium text-white">No shift periods recorded yet</p>
+            <p className="text-xs text-slate-400 mt-1">
+              When counter staff open and close shifts, their till balance delta appears here automatically.
+            </p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto rounded-2xl border border-slate-800 bg-slate-900/60 shadow-xl">
+            <table className="min-w-full divide-y divide-slate-800 text-left">
+              <thead className="bg-slate-900 text-xs font-semibold uppercase tracking-wider text-slate-400">
+                <tr>
+                  <th className="px-6 py-4">Opened</th>
+                  <th className="px-6 py-4">Shift Period</th>
+                  <th className="px-6 py-4">Status / Closed</th>
+                  <th className="px-6 py-4 text-right">Net M-Pesa Received</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800/80 text-sm text-slate-200">
                 {recentShifts.map((s) => {
-                  const delta = periodDelta(s.id);
+                  const mpesaAmount = balancesByShift.data?.[s.id] ?? 0;
                   return (
-                    <tr key={s.id} className="border-t">
-                      <td className="p-3 text-sm">{new Date(s.openedAt).toLocaleString()}</td>
-                      <td className="p-3 text-sm capitalize">{s.periodType.toLowerCase()}</td>
-                      <td className="p-3 text-sm">{s.closedAt ? new Date(s.closedAt).toLocaleString() : "Open"}</td>
-                      <td className="p-3 text-right font-semibold">
-                        {delta === null ? <span className="text-gray-400">—</span> : `KES ${delta.toLocaleString()}`}
+                    <tr key={s.id} className="hover:bg-slate-800/40 transition-colors">
+                      <td className="px-6 py-4 text-sm text-slate-300">
+                        {new Date(s.openedAt).toLocaleString()}
+                      </td>
+                      <td className="px-6 py-4">
+                        <span className="capitalize font-medium text-white">
+                          {s.periodType?.toLowerCase() || "Day"} Shift
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 text-xs text-slate-400">
+                        {s.closedAt ? new Date(s.closedAt).toLocaleString() : (
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                            Active
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-6 py-4 text-right font-bold text-emerald-400 font-mono">
+                        KES {Number(mpesaAmount).toLocaleString()}
                       </td>
                     </tr>
                   );
                 })}
               </tbody>
             </table>
-          )}
-          <p className="text-xs text-gray-500 mt-2">
-            The amount is derived from the M-Pesa balance snapshots taken when the period opened and closed — no individual transactions are recorded.
-          </p>
-        </section>
-      </main>
-    </>
+          </div>
+        )}
+      </section>
+    </div>
   );
 }

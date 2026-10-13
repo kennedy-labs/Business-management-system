@@ -27,8 +27,8 @@ import {
 export default function OpenShiftScreen() {
   const qc = useQueryClient();
   const user = useAuthStore((s) => s.user);
-  const businessId = (user?.businessId as string) ?? "joypub";
-  const userId = (user?.id as string) ?? "default-user-id";
+  const businessId = user?.businessId || "";
+  const userId = user?.id || "";
 
   const inventory = useQuery({
     queryKey: ["inventoryItems"],

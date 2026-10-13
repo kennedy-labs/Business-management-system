@@ -3,6 +3,7 @@
 import { useState, useCallback } from "react";
 import { useAuthStore } from "@/store/useAuthStore";
 import api from "@/lib/api/api";
+import { PlusCircle } from "lucide-react";
 
 import SectionHeader from "./components/Layout/SectionHeader";
 import AddProductForm from "./components/StockManagement/AddProductForm";
@@ -11,17 +12,12 @@ import { useProducts, useInventory, useStockLocations } from "./components/Stock
 
 export const dynamic = "force-dynamic";
 
-/**
- * Owner Stock Management Page
- * 
- * Clean interface for managing products and inventory levels.
- * Inventory levels are stored as the source of truth via direct API updates.
- */
 export default function OwnerStockPage() {
   const user = useAuthStore((s) => s.user);
   const businessId = user?.businessId as string | undefined;
   const [showAddProduct, setShowAddProduct] = useState(false);
   const [updatingProducts, setUpdatingProducts] = useState<Set<string>>(new Set());
+  const [errorBanner, setErrorBanner] = useState<string | null>(null);
 
   // Data fetching hooks
   const {
@@ -45,19 +41,23 @@ export default function OwnerStockPage() {
   const handleUpdateLevel = useCallback(
     async (productId: string, quantity: number) => {
       setUpdatingProducts((prev) => new Set(prev).add(productId));
+      setErrorBanner(null);
       try {
         await api.put("/inventory-items/level", {
           productId,
           quantity,
+          businessId,
         });
-        
+
         // Refresh all related data
         await Promise.all([refreshInventory(), refreshProducts()]);
-      } catch (e: unknown) {
+      } catch (e: any) {
         const message =
-          (e as { response?: { data?: { message?: string } } })?.response?.data
-            ?.message || "Failed to update inventory level";
-        alert(message);
+          e?.response?.data?.message ||
+          e?.response?.data?.error ||
+          e?.message ||
+          "Failed to update inventory level";
+        setErrorBanner(message);
       } finally {
         setUpdatingProducts((prev) => {
           const next = new Set(prev);
@@ -66,37 +66,45 @@ export default function OwnerStockPage() {
         });
       }
     },
-    [refreshInventory, refreshProducts]
+    [businessId, refreshInventory, refreshProducts]
   );
 
-  // Handle product creation success
   const handleProductCreated = () => {
     refreshProducts();
     refreshLocations();
+    refreshInventory();
   };
 
   if (!businessId) {
     return (
-      <main className="p-6">
-        <p>Loading...</p>
-      </main>
+      <div className="flex items-center justify-center min-h-[400px] text-slate-400">
+        <div className="w-5 h-5 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin mr-2" />
+        <span>Loading stock management...</span>
+      </div>
     );
   }
 
   return (
-    <main className="p-6 max-w-7xl mx-auto">
-      <div className="flex justify-between items-center mb-6">
-        <SectionHeader 
-          title="Stock Management" 
-          subtitle="Manage products and inventory levels"
+    <div className="space-y-6 max-w-7xl mx-auto">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <SectionHeader
+          title="Stock & Inventory Register"
+          subtitle="Add products, set price points, and update counted quantities."
         />
         <button
           onClick={() => setShowAddProduct(true)}
-          className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="inline-flex items-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-xl shadow-md shadow-indigo-600/30 transition-all cursor-pointer"
         >
-          + Add Product
+          <PlusCircle className="w-4 h-4" />
+          <span>Add New Product</span>
         </button>
       </div>
+
+      {errorBanner && (
+        <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-xs">
+          {errorBanner}
+        </div>
+      )}
 
       {/* Add Product Modal */}
       {showAddProduct && (
@@ -109,22 +117,15 @@ export default function OwnerStockPage() {
       )}
 
       {/* Products Section */}
-      <section className="mb-8">
-        <h2 className="text-xl font-semibold mb-4">Products</h2>
-        
-        {!products?.length && !productsLoading ? (
-          <p className="text-gray-500">No products yet. Add your first product to get started.</p>
-        ) : (
-          <ProductsTable
-            products={products ?? []}
-            inventory={inventory ?? []}
-            isLoading={productsLoading || inventoryLoading}
-            onUpdateLevel={handleUpdateLevel}
-            updatingProducts={updatingProducts}
-          />
-        )}
+      <section>
+        <ProductsTable
+          products={products ?? []}
+          inventory={inventory ?? []}
+          isLoading={productsLoading || inventoryLoading}
+          onUpdateLevel={handleUpdateLevel}
+          updatingProducts={updatingProducts}
+        />
       </section>
-    </main>
+    </div>
   );
 }
-

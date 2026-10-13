@@ -1,24 +1,34 @@
 import type { NextConfig } from "next";
 
-// Where the NestJS backend actually lives. The browser never talks to this
-// directly — see the rewrite below — so CORS and port mismatches cannot
-// break the app in development.
-const BACKEND_URL = process.env.BACKEND_URL ?? "http://localhost:3000";
+// Ensure BACKEND_URL has a valid protocol if provided
+const rawBackend = process.env.BACKEND_URL?.trim();
+const BACKEND_URL = rawBackend
+  ? rawBackend.startsWith("http://") || rawBackend.startsWith("https://")
+    ? rawBackend
+    : `https://${rawBackend}`
+  : undefined;
+
+// Only proxy to external backend if USE_REMOTE_BACKEND is explicitly true.
+// Otherwise, Next.js internal API route handlers handle requests locally with seeded in-memory store.
+const USE_REMOTE_BACKEND = process.env.USE_REMOTE_BACKEND === "true";
 
 const nextConfig: NextConfig = {
-  /* config options here */
-  // Set empty turbopack config to silence the webpack/Turbopack conflict warning
+  allowedDevOrigins: [
+    "*.run.app",
+    "ais-dev-ntsdwnl4k6ta5sjsc4qlbk-263355470755.europe-west2.run.app",
+    "ais-pre-ntsdwnl4k6ta5sjsc4qlbk-263355470755.europe-west2.run.app",
+    "localhost",
+    "localhost:3000",
+    "localhost:8080",
+    "127.0.0.1",
+    "127.0.0.1:3000",
+  ],
+  output: "standalone",
   turbopack: {},
 
-  // Proxy every /api/* request to the backend from the Next.js server.
-  // Requests become same-origin in the browser, so there is no CORS
-  // preflight and no dependence on the backend port being reachable
-  // from the user's browser.
   async redirects() {
     return [
       {
-        // The old worker flow was five pages under /worker/shift; it is now a
-        // single state machine at /worker. Old links land in the right place.
         source: "/worker/shift/:path*",
         destination: "/worker",
         permanent: false,
@@ -27,6 +37,7 @@ const nextConfig: NextConfig = {
   },
 
   async rewrites() {
+    if (!USE_REMOTE_BACKEND || !BACKEND_URL) return [];
     return [
       {
         source: "/api/:path*",

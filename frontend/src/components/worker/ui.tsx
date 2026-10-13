@@ -23,6 +23,10 @@ export function timeOf(iso: string | null | undefined) {
   return iso ? new Date(iso).toLocaleTimeString("en-KE", { hour: "2-digit", minute: "2-digit" }) : "—";
 }
 
+import { useAuthStore } from "@/store/useAuthStore";
+import { useRouter } from "next/navigation";
+import Link from "next/link";
+
 /** Phone-width shell with a sticky status header and a sticky action footer. */
 export function WorkerShell({
   title,
@@ -35,12 +39,38 @@ export function WorkerShell({
   footer?: React.ReactNode;
   children: React.ReactNode;
 }) {
+  const { user, business, logout } = useAuthStore();
+  const router = useRouter();
+
   return (
     <div className="min-h-dvh bg-slate-100 flex justify-center">
       <div className="w-full max-w-md flex flex-col min-h-dvh">
         <header className="sticky top-0 z-20 bg-slate-900 text-white px-4 py-3 shadow">
-          <div className="text-xs text-slate-400">Bar Ops · Worker</div>
-          <h1 className="text-lg font-bold leading-tight">{title}</h1>
+          <div className="flex items-center justify-between">
+            <div className="text-xs text-indigo-400 font-semibold truncate max-w-[200px]">
+              {business?.name || user?.businessName || "Bar Ops"} &bull; {user?.name || "Worker"}
+            </div>
+            <div className="flex items-center gap-2">
+              {user?.role === "OWNER" && (
+                <Link
+                  href="/owner/dashboard"
+                  className="text-[11px] text-slate-300 hover:text-white px-2 py-0.5 rounded bg-slate-800"
+                >
+                  Owner
+                </Link>
+              )}
+              <button
+                onClick={() => {
+                  logout();
+                  router.replace("/login");
+                }}
+                className="text-[11px] text-rose-400 hover:text-rose-300 px-2 py-0.5 rounded hover:bg-slate-800"
+              >
+                Sign Out
+              </button>
+            </div>
+          </div>
+          <h1 className="text-lg font-bold leading-tight mt-1">{title}</h1>
           {subtitle ? (
             <div className="text-xs text-slate-300 mt-0.5">{subtitle}</div>
           ) : null}
