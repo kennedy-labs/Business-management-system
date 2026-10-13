@@ -25,6 +25,7 @@ const nextConfig: NextConfig = {
   ],
   output: "standalone",
   turbopack: {},
+  devIndicators: false,
 
   async redirects() {
     return [

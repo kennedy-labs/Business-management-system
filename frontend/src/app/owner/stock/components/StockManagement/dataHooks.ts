@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useQuery } from "@tanstack/react-query";
 import api from "@/lib/api/api";
 
 export type Product = {
@@ -26,122 +26,82 @@ type UseProductsReturn = {
   products: Product[] | undefined;
   isLoading: boolean;
   error: Error | null;
-  refresh: () => void;
+  refresh: () => Promise<any>;
 };
 
 type UseInventoryReturn = {
   inventory: InventoryItem[] | undefined;
   isLoading: boolean;
   error: Error | null;
-  refresh: () => void;
+  refresh: () => Promise<any>;
 };
 
 type UseStockLocationsReturn = {
   locations: StockLocation[] | undefined;
   isLoading: boolean;
   error: Error | null;
-  refresh: () => void;
+  refresh: () => Promise<any>;
 };
 
 /**
- * Custom hook for fetching products with consistent error handling.
- * Separates data fetching concerns from presentation logic.
+ * Custom hook for fetching products with TanStack Query caching for instant transitions.
  */
-export function useProducts(businessId: string) {
-  const [products, setProducts] = useState<Product[]>();
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<Error | null>(null);
-
-  const fetchProducts = async () => {
-    if (!businessId) return;
-    setIsLoading(true);
-    setError(null);
-    try {
+export function useProducts(businessId: string): UseProductsReturn {
+  const { data, isLoading, error, refetch } = useQuery({
+    queryKey: ["products", businessId],
+    queryFn: async () => {
       const response = await api.get("/products", { params: { businessId } });
-      setProducts(response.data);
-    } catch (err) {
-      setError(err as Error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchProducts();
-  }, [businessId]);
+      return response.data as Product[];
+    },
+    enabled: !!businessId,
+  });
 
   return {
-    products,
+    products: data,
     isLoading,
-    error,
-    refresh: fetchProducts,
-  } as UseProductsReturn;
+    error: error as Error | null,
+    refresh: refetch,
+  };
 }
 
 /**
- * Custom hook for fetching inventory items.
+ * Custom hook for fetching inventory items with TanStack Query caching.
  */
-export function useInventory(businessId: string) {
-  const [inventory, setInventory] = useState<InventoryItem[]>();
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<Error | null>(null);
-
-  const fetchInventory = async () => {
-    if (!businessId) return;
-    setIsLoading(true);
-    setError(null);
-    try {
+export function useInventory(businessId: string): UseInventoryReturn {
+  const { data, isLoading, error, refetch } = useQuery({
+    queryKey: ["inventory", businessId],
+    queryFn: async () => {
       const response = await api.get("/inventory-items");
-      setInventory(response.data);
-    } catch (err) {
-      setError(err as Error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchInventory();
-  }, [businessId]);
+      return response.data as InventoryItem[];
+    },
+    enabled: !!businessId,
+  });
 
   return {
-    inventory,
+    inventory: data,
     isLoading,
-    error,
-    refresh: fetchInventory,
-  } as UseInventoryReturn;
+    error: error as Error | null,
+    refresh: refetch,
+  };
 }
 
 /**
- * Custom hook for fetching stock locations.
+ * Custom hook for fetching stock locations with TanStack Query caching.
  */
-export function useStockLocations(businessId: string) {
-  const [locations, setLocations] = useState<StockLocation[]>();
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<Error | null>(null);
-
-  const fetchLocations = async () => {
-    if (!businessId) return;
-    setIsLoading(true);
-    setError(null);
-    try {
+export function useStockLocations(businessId: string): UseStockLocationsReturn {
+  const { data, isLoading, error, refetch } = useQuery({
+    queryKey: ["stockLocations", businessId],
+    queryFn: async () => {
       const response = await api.get("/stock-locations");
-      setLocations(response.data);
-    } catch (err) {
-      setError(err as Error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchLocations();
-  }, [businessId]);
+      return response.data as StockLocation[];
+    },
+    enabled: !!businessId,
+  });
 
   return {
-    locations,
+    locations: data,
     isLoading,
-    error,
-    refresh: fetchLocations,
-  } as UseStockLocationsReturn;
+    error: error as Error | null,
+    refresh: refetch,
+  };
 }
