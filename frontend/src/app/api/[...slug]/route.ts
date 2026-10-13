@@ -86,8 +86,8 @@ interface ShiftStockItem {
   closingQuantity: number | null;
   soldQuantity?: number;
   revenue?: number;
-  cost?: number;
-  grossProfit?: number;
+  unitSellingPrice?: number;
+  unitCostPrice?: number;
 }
 
 interface MpesaReading {
@@ -138,6 +138,7 @@ class CleanStore {
   reconciliations: Record<string, any> = {};
   discrepancies: Discrepancy[] = [];
   expenses: Expense[] = [];
+  stockMovements: any[] = [];
   tokens: Record<string, { userId: string; businessId: string }> = {};
 }
 
@@ -680,6 +681,7 @@ export async function POST(
 
     if (Array.isArray(body.items)) {
       for (const item of body.items) {
+        const prod = store.products.find((p) => p.id === item.productId);
         store.shiftStockItems.push({
           id: `ssi-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
           shiftId: newShift.id,
@@ -688,6 +690,8 @@ export async function POST(
           openingQuantity: item.openingQuantity || 0,
           addedQuantity: 0,
           closingQuantity: null,
+          unitSellingPrice: prod?.sellingPrice || 0,
+          unitCostPrice: prod?.costPrice || Math.round((prod?.sellingPrice || 0) * 0.7),
         });
       }
     }
@@ -772,8 +776,9 @@ export async function POST(
           ? si.closingQuantity
           : opening;
       const sold = Math.max(0, opening + added - closing);
-      const sellingPrice = prod?.sellingPrice || 0;
-      const costPrice = prod?.costPrice || Math.round(sellingPrice * 0.7);
+      const sellingPrice = si.unitSellingPrice ?? prod?.sellingPrice ?? 0;
+      const costPrice =
+        si.unitCostPrice ?? prod?.costPrice ?? Math.round(sellingPrice * 0.7);
       const rev = sold * sellingPrice;
       const cost = sold * costPrice;
       totalRevenue += rev;
@@ -886,30 +891,68 @@ export async function PUT(
   // Set Inventory Level: /inventory-items/level
   if (path === "inventory-items/level") {
     const item = store.inventoryItems.find((i) => i.productId === body.productId);
+    const prevQty = item ? item.quantity : 0;
+    const newQty = Math.max(0, Number(body.quantity) || 0);
+    const delta = newQty - prevQty;
+    const reason = body.reason || "PHYSICAL_COUNT";
+
     if (item) {
-      item.quantity = Number(body.quantity) || 0;
-      return NextResponse.json(item);
+      item.quantity = newQty;
+    } else {
+      const prod = store.products.find((p) => p.id === body.productId);
+      const defaultBranch = store.branches.find((b) => b.businessId === activeBizId);
+      const defaultLoc = store.stockLocations.find((l) => l.businessId === activeBizId);
+
+      const newItem: InventoryItem = {
+        id: `inv-${Date.now()}`,
+        quantity: newQty,
+        branchId: body.branchId || defaultBranch?.id || "branch-main",
+        productId: body.productId,
+        stockLocationId: defaultLoc?.id || null,
+        product: {
+          id: body.productId,
+          name: prod?.name || "Product",
+          sellingPrice: prod?.sellingPrice || 0,
+        },
+        stockLocation: defaultLoc ? { id: defaultLoc.id, name: defaultLoc.name } : null,
+      };
+      store.inventoryItems.push(newItem);
     }
 
-    const prod = store.products.find((p) => p.id === body.productId);
-    const defaultBranch = store.branches.find((b) => b.businessId === activeBizId);
-    const defaultLoc = store.stockLocations.find((l) => l.businessId === activeBizId);
-
-    const newItem: InventoryItem = {
-      id: `inv-${Date.now()}`,
-      quantity: Number(body.quantity) || 0,
-      branchId: body.branchId || defaultBranch?.id || "branch-main",
+    // Record stock movement audit trail
+    store.stockMovements = store.stockMovements || [];
+    store.stockMovements.unshift({
+      id: `sm-${Date.now()}`,
       productId: body.productId,
-      stockLocationId: defaultLoc?.id || null,
-      product: {
-        id: body.productId,
-        name: prod?.name || "Product",
-        sellingPrice: prod?.sellingPrice || 0,
-      },
-      stockLocation: defaultLoc ? { id: defaultLoc.id, name: defaultLoc.name } : null,
-    };
-    store.inventoryItems.push(newItem);
-    return NextResponse.json(newItem);
+      previousQuantity: prevQty,
+      newQuantity: newQty,
+      delta,
+      reason,
+      businessId: activeBizId || "biz-default",
+      timestamp: new Date().toISOString(),
+    });
+
+    // If shrinkage/loss detected, log discrepancy
+    if (delta < 0 && (reason === "BREAKAGE" || reason === "PHYSICAL_COUNT")) {
+      const prod = store.products.find((p) => p.id === body.productId);
+      const unitVal = prod?.sellingPrice || 0;
+      const lostVal = Math.abs(delta) * unitVal;
+      store.discrepancies.unshift({
+        id: `disc-stock-${Date.now()}`,
+        type: "STOCK_SHORTAGE",
+        expectedValue: prevQty * unitVal,
+        actualValue: newQty * unitVal,
+        valueVariance: -lostVal,
+        status: "OPEN",
+        resolution: null,
+        notes: `Inventory adjustment for ${prod?.name || "Product"}: ${prevQty} -> ${newQty} (${delta} units, reason: ${reason})`,
+        businessId: activeBizId || "biz-default",
+        createdAt: new Date().toISOString(),
+      });
+    }
+
+    const updated = store.inventoryItems.find((i) => i.productId === body.productId);
+    return NextResponse.json(updated);
   }
 
   return NextResponse.json({ message: "Updated", path });
@@ -958,6 +1001,13 @@ export async function PATCH(
       if (body.name !== undefined) prod.name = body.name;
       if (body.sellingPrice !== undefined) prod.sellingPrice = Number(body.sellingPrice);
       if (body.costPrice !== undefined) prod.costPrice = Number(body.costPrice);
+
+      for (const item of store.inventoryItems) {
+        if (item.productId === id) {
+          if (body.name !== undefined) item.product.name = body.name;
+          if (body.sellingPrice !== undefined) item.product.sellingPrice = Number(body.sellingPrice);
+        }
+      }
       return NextResponse.json(prod);
     }
   }

@@ -35,13 +35,14 @@ export default function StockTab() {
   } = useStockLocations(businessId ?? "");
 
   const handleUpdateLevel = useCallback(
-    async (productId: string, quantity: number) => {
+    async (productId: string, quantity: number, reason?: string) => {
       setUpdatingProducts((prev) => new Set(prev).add(productId));
       setErrorBanner(null);
       try {
         await api.put("/inventory-items/level", {
           productId,
           quantity,
+          reason,
           businessId,
         });
         await Promise.all([refreshInventory(), refreshProducts()]);
@@ -61,6 +62,34 @@ export default function StockTab() {
       }
     },
     [businessId, refreshInventory, refreshProducts]
+  );
+
+  const handleUpdateProduct = useCallback(
+    async (
+      productId: string,
+      data: { name: string; sellingPrice: number; costPrice?: number }
+    ) => {
+      setUpdatingProducts((prev) => new Set(prev).add(productId));
+      setErrorBanner(null);
+      try {
+        await api.patch(`/products/${productId}`, data);
+        await Promise.all([refreshInventory(), refreshProducts()]);
+      } catch (e: any) {
+        const message =
+          e?.response?.data?.message ||
+          e?.response?.data?.error ||
+          e?.message ||
+          "Failed to update product details";
+        setErrorBanner(message);
+      } finally {
+        setUpdatingProducts((prev) => {
+          const next = new Set(prev);
+          next.delete(productId);
+          return next;
+        });
+      }
+    },
+    [refreshInventory, refreshProducts]
   );
 
   const handleProductCreated = () => {
@@ -115,6 +144,7 @@ export default function StockTab() {
           inventory={inventory ?? []}
           isLoading={productsLoading || inventoryLoading}
           onUpdateLevel={handleUpdateLevel}
+          onUpdateProduct={handleUpdateProduct}
           updatingProducts={updatingProducts}
         />
       </section>
