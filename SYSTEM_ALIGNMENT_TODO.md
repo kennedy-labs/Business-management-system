@@ -14,6 +14,8 @@
 > Diagnosis run 2026-10-15: `tools/mock-api-harness` drove the real
 > `/api/[...slug]` handler through 44 real-life checks → **11 PASS, 31 FAIL**.
 > Full findings + phased polish plan in **`SYSTEM_DIAGNOSIS_AND_POLISH_PLAN.md`**.
+> **The step-by-step task list to execute is `FIX_PLAN.md`** — work it in order,
+> one task per commit, running each task's verification before committing.
 > Phase 0 blocks every other phase: with `USE_REMOTE_BACKEND` unset the app runs
 > on the non-persistent in-memory mock, so the real backend is never exercised.
 
