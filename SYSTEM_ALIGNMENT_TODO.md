@@ -9,6 +9,34 @@
 
 ---
 
+## Phase 0 — One backend, one truth *(NEW — see `SYSTEM_DIAGNOSIS_AND_POLISH_PLAN.md`)*
+
+> Diagnosis run 2026-10-15: `tools/mock-api-harness` drove the real
+> `/api/[...slug]` handler through 44 real-life checks → **11 PASS, 31 FAIL**.
+> Full findings + phased polish plan in **`SYSTEM_DIAGNOSIS_AND_POLISH_PLAN.md`**.
+> Phase 0 blocks every other phase: with `USE_REMOTE_BACKEND` unset the app runs
+> on the non-persistent in-memory mock, so the real backend is never exercised.
+
+- [ ] **P0-1** Make the NestJS/Prisma backend the only runtime
+      (`USE_REMOTE_BACKEND=true`, `BACKEND_URL` set).
+- [ ] **P0-2** Gate the mock behind `ENABLE_MOCK_API=true` and make its
+      catch-all return **501** (today `POST .../reconciliation/confirm` returns
+      `201 Created` while changing nothing).
+- [ ] **P0-3** Run the real backend end-to-end against Postgres and re-run the
+      harness against it.
+- [ ] **P0-4** Delete `frontend/src/app/api/[...slug]/route.ts`.
+- [ ] **P0-5** **Cost price is dropped by the real backend** (`Product` has no
+      `costPrice`; `CreateProductDto`/`UpdateProductDto` lack it; no
+      `ProductCostHistory` write path) ⇒ COGS 0 ⇒ every period reports ~100%
+      margin. This is the highest-severity correctness bug found.
+- [ ] **P0-6** Fix tenant isolation: `GET /products` is readable with no header,
+      `GET /shift-stock-items` ignores the business, and several services
+      `update`/`delete` by id without a business check.
+- [ ] **P0-7** Remove `Math.max(0, …)` from reconciliation: it currently turns a
+      real shortage into a **false clean** variance of 0.
+
+---
+
 ## Phase 1 — Unblock the UI (highest impact, smallest, safe)
 
 Goal: stop the `"property X should not exist"` failures and make owner CRUD forms work.
